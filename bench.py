@@ -1,5 +1,11 @@
 """
-A much shorter version of train.py for benchmarking
+A much shorter version of train.py for benchmarking. 
+
+To run with DDP on 4 gpus on 1 node, example:
+$ torchrun --standalone --nproc_per_node=4 train.py
+
+Additions from anj-s: Support for other distributed APIs (+other techniques) beyond DDP.
+
 """
 import os
 from contextlib import nullcontext
@@ -14,11 +20,11 @@ from torch.distributed import init_process_group, destroy_process_group
 batch_size = 12
 block_size = 1024
 bias = False
-real_data = True
+real_data = False
 seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
-compile = True # use PyTorch 2.0 to compile the model to be faster
+compile = False # use PyTorch 2.0 to compile the model to be faster
 profile = False # use pytorch profiler, or just simple benchmarking?
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
@@ -80,12 +86,12 @@ gptconf = GPTConfig(
     bias = bias,
 )
 model = GPT(gptconf)
+optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
 # wrap model into DDP container
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 
-optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 
 if compile:
     print("Compiling model...")
