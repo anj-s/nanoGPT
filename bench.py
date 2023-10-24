@@ -2,7 +2,7 @@
 A much shorter version of train.py for benchmarking. 
 
 To run with DDP on 4 gpus on 1 node, example:
-$ torchrun --standalone --nproc_per_node=4 train.py
+$ torchrun --standalone --nproc_per_node=4 train.py config/bench_gpt2_ddp.py
 
 Additions from anj-s: Support for other distributed APIs (+other techniques) beyond DDP.
 
@@ -15,17 +15,20 @@ import torch
 from model import GPTConfig, GPT
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
+from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
 
 # -----------------------------------------------------------------------------
 batch_size = 12
 block_size = 1024
 bias = False
-real_data = False
+real_data = True
 seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
-compile = False # use PyTorch 2.0 to compile the model to be faster
+compile = True # use PyTorch 2.0 to compile the model to be faster
 profile = False # use pytorch profiler, or just simple benchmarking?
+ddp = False
+fsdp = False
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -37,11 +40,17 @@ device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.aut
 ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-# ---------------------------------------------------------------------------------
-# DDP settings
+# ----------------------------------------------------------------------------------------
+# Distributed settings
 backend = 'nccl' # 'nccl', 'gloo', etc.
 # various inits, derived attributes, I/O setup
-ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
+distributed = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
+
+if not distributed and (ddp or fsdp):
+    raise RuntimeError("Initialize a distributed run.")
+
+# ----------------------------------------------------------------------------------------
+# DDP configs
 if ddp:
     init_process_group(backend=backend)
     ddp_rank = int(os.environ['RANK'])
@@ -56,8 +65,16 @@ else:
     master_process = True
     seed_offset = 0
     ddp_world_size = 1
+
 tokens_per_iter = ddp_world_size * batch_size * block_size
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
+
+# ----------------------------------------------------------------------------------------
+# FSDP configs
+if fsdp:
+    # Compute the FSDP config.
+    fsdp_config = {}
+    fsdp_config["mixed_precision"] = True
 
 
 # data loading init
@@ -88,9 +105,14 @@ gptconf = GPTConfig(
 model = GPT(gptconf)
 optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
+
+
 # wrap model into DDP container
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
+
+if fsdp:
+    model = FSDP(module, **fsdp_config)
 
 
 if compile:
