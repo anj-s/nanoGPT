@@ -112,7 +112,7 @@ if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 
 if fsdp:
-    model = FSDP(module, **fsdp_config)
+    model = FSDP(model, **fsdp_config)
 
 
 if compile:
