@@ -72,6 +72,14 @@ print(f"tokens per iteration will be: {tokens_per_iter:,}")
 # ----------------------------------------------------------------------------------------
 # FSDP configs
 if fsdp:
+    init_process_group(backend=backend)
+    fsdp_rank = int(os.environ['RANK'])
+    fsdp_local_rank = int(os.environ['LOCAL_RANK'])
+    fsdp_world_size = int(os.environ['WORLD_SIZE'])
+    device = f'cuda:{fsdp_local_rank}'
+    torch.cuda.set_device(device)
+    master_process = fsdp_rank == 0 # this process will do logging, checkpointing etc.
+    seed_offset = fsdp_rank # each process gets a different seed
     # Compute the FSDP config.
     fsdp_config = {}
     fsdp_config["mixed_precision"] = True
