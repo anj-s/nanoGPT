@@ -127,7 +127,7 @@ if compile:
     print("Compiling model...")
     model = torch.compile(model) # pytorch 2.0
 
-if profile:
+if profile and int(os.environ['RANK']) == 0:
     # useful docs on pytorch profiler:
     # - tutorial https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html
     # - api https://pytorch.org/docs/stable/profiler.html#torch.profiler.profile
