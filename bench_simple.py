@@ -83,10 +83,10 @@ if ddp:
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
     seed_offset = ddp_rank # each process gets a different seed
 elif ddp_tp:
-    distributed_init(2, 1, 2)
     local_rank = int(os.environ['LOCAL_RANK'])
     device = f'cuda:{local_rank}'
     torch.cuda.set_device(device)
+    distributed_init(2, 1, 2)
     master_process = torch.distributed.get_rank() == 0 # this process will do logging, checkpointing etc.
     seed_offset = local_rank # each process gets a different seed
 else:
