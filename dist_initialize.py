@@ -71,7 +71,7 @@ def distributed_init(world_size, data_parallel_size, model_parallel_size, backen
     initialize_model_parallel(model_parallel_size)
     if torch.cuda.is_available():
         dist.all_reduce(torch.zeros(1).cuda(), group=get_model_parallel_group())
-    model_parallel_cuda_manual_seed(cfg.common.seed)
+    model_parallel_cuda_manual_seed(2)
     # This check should not be usually needed as we call init only once
     # but seems like tests are calling it multiple times.
     # if _GLOBAL_MEMORY_BUFFER is None:
