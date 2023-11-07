@@ -17,7 +17,7 @@ from model import GPTConfig, GPT
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from dist_initialize import distributed_init, global_barrier
-from fairscale.megatron.tensor_parallel.layers import RowParallelLinear
+from fairscale.nn.megatron.tensor_parallel.layers import RowParallelLinear
 
 # -----------------------------------------------------------------------------
 # Model definition to get started, taking a simple MLP module from the larger GPT one.
@@ -127,11 +127,12 @@ else:
 # )
 # model = GPT(gptconf)
 model = MLP(8)
+model = DDP(model)
 optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
 
 global_barrier()
-afnlf
+kbafbfs
 
 # wrap model into DDP container
 if ddp:

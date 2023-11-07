@@ -54,7 +54,7 @@ def distributed_init(world_size, data_parallel_size, model_parallel_size, backen
         logging.getLogger().setLevel(logging.WARNING)
 
 
-    from fairscale.megatron.tensor_parallel.initialize import (
+    from fairscale.nn.megatron.tensor_parallel.initialize import (
         initialize_model_parallel,
         model_parallel_cuda_manual_seed,
     )
@@ -152,7 +152,7 @@ def get_data_parallel_group():
     """Get the data parallel group the caller rank belongs to."""
     global _USE_MEGATRON
     if _USE_MEGATRON:
-        from fairscale.megatron.tensor_parallel import initialize
+        from fairscale.nn.megatron.tensor_parallel.initialize import initialize
 
         return initialize.get_data_parallel_group()
     else:
