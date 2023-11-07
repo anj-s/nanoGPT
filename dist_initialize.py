@@ -77,7 +77,7 @@ def distributed_init(world_size, data_parallel_size, model_parallel_size, backen
     # if _GLOBAL_MEMORY_BUFFER is None:
     #     _set_global_memory_buffer()
     model_part_number = get_model_parallel_rank()
-    checkpoint_suffix += "-model_part-{0}".format(model_part_number)
+    checkpoint_suffix = "-model_part-{0}".format(model_part_number)
 
     logger.log(logging.INFO, f"model_part_number {model_part_number}")
 
