@@ -152,7 +152,7 @@ def get_data_parallel_group():
     """Get the data parallel group the caller rank belongs to."""
     global _USE_MEGATRON
     if _USE_MEGATRON:
-        from fairscale.nn.megatron.tensor_parallel.initialize import initialize
+        from fairscale.nn.megatron.tensor_parallel import initialize
 
         return initialize.get_data_parallel_group()
     else:
@@ -180,7 +180,7 @@ def get_data_parallel_world_size():
 def get_model_parallel_group():
     global _USE_MEGATRON
     if _USE_MEGATRON:
-        from get_data_parallel_group import initialize
+        from fairscale.nn.megatron.tensor_parallel import initialize
 
         return initialize.get_tensor_model_parallel_group()
     else:
