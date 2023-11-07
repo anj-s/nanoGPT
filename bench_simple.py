@@ -12,23 +12,45 @@ from contextlib import nullcontext
 import numpy as np
 import time
 import torch
+from torch import nn
 from model import GPTConfig, GPT
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
-from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
+from dist_initialize import distributed_init, global_barrier
+from fairscale.megatron.tensor_parallel.layers import RowParallelLinear
+
+# -----------------------------------------------------------------------------
+# Model definition to get started, taking a simple MLP module from the larger GPT one.
+class MLP(nn.Module):
+
+    def __init__(self, d_model):
+        super().__init__()
+        # self.c_fc    = nn.Linear(d_model, 4 * d_model, bias=False)
+        self.c_fc    = RowParallelLinear(d_model, 4 * d_model, bias=False)
+        self.gelu    = nn.GELU()
+        # self.c_proj  = nn.Linear(4 * d_model, d_model, bias=False)
+        # self.dropout = nn.Dropout(0.2)
+
+    def forward(self, x):
+        x = self.c_fc(x)
+        x = self.gelu(x)
+        # x = self.c_proj(x)
+        # x = self.dropout(x)
+        return x
+
 
 # -----------------------------------------------------------------------------
 batch_size = 12
 block_size = 1024
 bias = False
-real_data = True
+real_data = False
 seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
-compile = True # use PyTorch 2.0 to compile the model to be faster
+compile = False # use PyTorch 2.0 to compile the model to be faster
 profile = False # use pytorch profiler, or just simple benchmarking?
 ddp = False
-fsdp = False
+ddp_tp = True
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -46,7 +68,7 @@ backend = 'nccl' # 'nccl', 'gloo', etc.
 # various inits, derived attributes, I/O setup
 distributed = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
 
-if not distributed and (ddp or fsdp):
+if not distributed and ddp:
     raise RuntimeError("Initialize a distributed run.")
 
 # ----------------------------------------------------------------------------------------
@@ -60,6 +82,13 @@ if ddp:
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
     seed_offset = ddp_rank # each process gets a different seed
+elif ddp_tp:
+    distributed_init(4, 2, 2)
+    local_rank = int(os.environ['LOCAL_RANK'])
+    device = f'cuda:{local_rank}'
+    torch.cuda.set_device(device)
+    master_process = torch.distributed.get_rank() == 0 # this process will do logging, checkpointing etc.
+    seed_offset = local_rank # each process gets a different seed
 else:
     # if not ddp, we are running on a single gpu, and one process
     master_process = True
@@ -70,20 +99,6 @@ tokens_per_iter = ddp_world_size * batch_size * block_size
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 # ----------------------------------------------------------------------------------------
-# FSDP configs
-if fsdp:
-    init_process_group(backend=backend)
-    fsdp_rank = int(os.environ['RANK'])
-    fsdp_local_rank = int(os.environ['LOCAL_RANK'])
-    fsdp_world_size = int(os.environ['WORLD_SIZE'])
-    device = f'cuda:{fsdp_local_rank}'
-    torch.cuda.set_device(device)
-    master_process = fsdp_rank == 0 # this process will do logging, checkpointing etc.
-    seed_offset = fsdp_rank # each process gets a different seed
-    # Compute the FSDP config.
-    fsdp_config = {}
-    fsdp_config["mixed_precision"] = True
-
 
 # data loading init
 if real_data:
@@ -104,24 +119,23 @@ else:
     get_batch = lambda split: (x, y)
 
 # model init
-gptconf = GPTConfig(
-    block_size = block_size, # how far back does the model look? i.e. context size
-    n_layer = 12, n_head = 12, n_embd = 768, # size of the model
-    dropout = 0, # for determinism
-    bias = bias,
-)
-model = GPT(gptconf)
+# gptconf = GPTConfig(
+#     block_size = block_size, # how far back does the model look? i.e. context size
+#     n_layer = 12, n_head = 12, n_embd = 768, # size of the model
+#     dropout = 0, # for determinism
+#     bias = bias,
+# )
+# model = GPT(gptconf)
+model = MLP(8)
 optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
 
+global_barrier()
+afnlf
 
 # wrap model into DDP container
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
-
-if fsdp:
-    model = FSDP(model, **fsdp_config)
-
 
 if compile:
     print("Compiling model...")
