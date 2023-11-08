@@ -18,15 +18,18 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from dist_initialize import distributed_init, global_barrier
 from fairscale.nn.megatron.tensor_parallel.layers import RowParallelLinear
+from fairscale.nn.megatron.model_parallel_config import ModelParallelConfig
 
 # -----------------------------------------------------------------------------
 # Model definition to get started, taking a simple MLP module from the larger GPT one.
+mpc = ModelParallelConfig(tensor_model_parallel_size=2)
+init_fn = torch.nn.init.uniform_
 class MLP(nn.Module):
 
     def __init__(self, d_model):
         super().__init__()
         # self.c_fc    = nn.Linear(d_model, 4 * d_model, bias=False)
-        self.c_fc    = RowParallelLinear(d_model, 4 * d_model, bias=False)
+        self.c_fc    = RowParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False)
         self.gelu    = nn.GELU()
         # self.c_proj  = nn.Linear(4 * d_model, d_model, bias=False)
         # self.dropout = nn.Dropout(0.2)
