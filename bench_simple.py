@@ -94,9 +94,9 @@ else:
     # if not ddp, we are running on a single gpu, and one process
     master_process = True
     seed_offset = 0
-    ddp_world_size = 1
+    world_size = 1
 
-tokens_per_iter = ddp_world_size * batch_size * block_size
+tokens_per_iter = world_size * batch_size * block_size
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 # ----------------------------------------------------------------------------------------
