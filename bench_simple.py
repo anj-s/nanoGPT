@@ -75,14 +75,15 @@ if not distributed and ddp:
 # DDP configs
 if ddp:
     init_process_group(backend=backend)
+    world_size = int(os.environ['WORLD_SIZE'])
     ddp_rank = int(os.environ['RANK'])
-    ddp_local_rank = int(os.environ['LOCAL_RANK'])
-    ddp_world_size = int(os.environ['WORLD_SIZE'])
-    device = f'cuda:{ddp_local_rank}'
+    local_rank = int(os.environ['LOCAL_RANK'])
+    device = f'cuda:{local_rank}'
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
     seed_offset = ddp_rank # each process gets a different seed
 elif ddp_tp:
+    world_size = int(os.environ['WORLD_SIZE'])
     local_rank = int(os.environ['LOCAL_RANK'])
     device = f'cuda:{local_rank}'
     torch.cuda.set_device(device)
@@ -127,16 +128,16 @@ else:
 # )
 # model = GPT(gptconf)
 model = MLP(8)
-model = DDP(model)
 optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
 
 global_barrier()
-kbafbfs
 
 # wrap model into DDP container
 if ddp:
-    model = DDP(model, device_ids=[ddp_local_rank])
+    model = DDP(model, device_ids=[local_rank])
+elif ddp_tp:
+    pass
 
 if compile:
     print("Compiling model...")
