@@ -226,7 +226,7 @@ else:
     torch.cuda.synchronize()
     for stage, num_steps in enumerate([10, 20]): # burnin, then benchmark
         t0 = time.time()
-        X = torch.randint(50304, (batch_size, 8), device=device)
+        X = torch.randint(50304, (batch_size, 8), device=device, dtype=torch.float16)
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
