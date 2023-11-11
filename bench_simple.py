@@ -1,8 +1,8 @@
 """
-A much shorter version of train.py for benchmarking. 
+Adapted bench.py for an example demonstrating only TP on a MLP module
 
-To run with DDP on 4 gpus on 1 node, example:
-$ torchrun --standalone --nproc_per_node=4 train.py config/bench_gpt2_ddp.py
+To run with TP on 2 gpus on 1 node, example:
+$ torchrun --standalone --nproc_per_node=2 bench_tp.py
 
 Additions from anj-s: Support for other distributed APIs (+other techniques) beyond DDP.
 
@@ -18,28 +18,31 @@ from model import GPTConfig, GPT
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from dist_initialize import distributed_init, global_barrier
-from fairscale.nn.megatron.tensor_parallel.layers import RowParallelLinear
+from fairscale.nn.megatron.tensor_parallel.layers import RowParallelLinear, ColumnParallelLinear
 from fairscale.nn.megatron.tensor_parallel.model_parallel_config import ModelParallelConfig
 
 # -----------------------------------------------------------------------------
 # Model definition to get started, taking a simple MLP module from the larger GPT one.
-mpc = ModelParallelConfig(tensor_model_parallel_size=2)
+data_parallel_size = 1
+tensor_parallel_size = 2
+mpc = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel_size)
 init_fn = torch.nn.init.uniform_
 class MLP(nn.Module):
 
     def __init__(self, d_model):
         super().__init__()
         # self.c_fc    = nn.Linear(d_model, 4 * d_model, bias=False)
-        self.c_fc    = RowParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False)
+        self.c_fc    = ColumnParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False)
         self.gelu    = nn.GELU()
         # self.c_proj  = nn.Linear(4 * d_model, d_model, bias=False)
+        self.c_proj  = RowParallelLinear(4 * d_model, d_model, config=mpc, init_method=init_fn, bias=False)
         # self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
         x = self.c_fc(x)
-        # x = self.gelu(x)
-        # x = self.c_proj(x)
-        # x = self.dropout(x)
+        x = self.gelu(x)
+        x = self.c_proj(x)
+        x = self.dropout(x)
         return x
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
@@ -88,13 +91,10 @@ class MLP(nn.Module):
 
 # -----------------------------------------------------------------------------
 batch_size = 12
-block_size = 1024
 bias = False
-real_data = False
 seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
-compile = False # use PyTorch 2.0 to compile the model to be faster
 profile = False # use pytorch profiler, or just simple benchmarking?
 ddp = False
 ddp_tp = True
@@ -134,7 +134,7 @@ elif ddp_tp:
     local_rank = int(os.environ['LOCAL_RANK'])
     device = f'cuda:{local_rank}'
     torch.cuda.set_device(device)
-    distributed_init(2, 1, 2)
+    distributed_init(world_size, data_parallel_size, tensor_parallel_size)
     master_process = torch.distributed.get_rank() == 0 # this process will do logging, checkpointing etc.
     seed_offset = local_rank # each process gets a different seed
 else:
@@ -143,37 +143,16 @@ else:
     seed_offset = 0
     world_size = 1
 
-tokens_per_iter = world_size * batch_size * block_size
-print(f"tokens per iteration will be: {tokens_per_iter:,}")
-
 # ----------------------------------------------------------------------------------------
 
 # data loading init
-if real_data:
-    dataset = 'openwebtext'
-    data_dir = os.path.join('data', dataset)
-    train_data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
-    def get_batch(split):
-        data = train_data # note ignore split in benchmarking script
-        ix = torch.randint(len(data) - block_size, (batch_size,))
-        x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
-        y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
-        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-        return x, y
-else:
-    # alternatively, if fixed data is desired to not care about data loading
-    x = torch.randint(50304, (batch_size, block_size), device=device)
-    y = torch.randint(50304, (batch_size, block_size), device=device)
-    get_batch = lambda split: (x, y)
+
+# alternatively, if fixed data is desired to not care about data loading
+x = torch.randint(50304, (batch_size, block_size), device=device)
+y = torch.randint(50304, (batch_size, block_size), device=device)
+get_batch = lambda split: (x, y)
 
 # model init
-# gptconf = GPTConfig(
-#     block_size = block_size, # how far back does the model look? i.e. context size
-#     n_layer = 12, n_head = 12, n_embd = 768, # size of the model
-#     dropout = 0, # for determinism
-#     bias = bias,
-# )
-# model = GPT(gptconf)
 model = MLP(8)
 optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
@@ -184,11 +163,8 @@ global_barrier()
 if ddp:
     model = DDP(model, device_ids=[local_rank])
 elif ddp_tp:
+    # for now let us do vanilla TP for dp=1
     pass
-
-if compile:
-    print("Compiling model...")
-    model = torch.compile(model) # pytorch 2.0
 
 if profile:
     # useful docs on pytorch profiler:
@@ -226,11 +202,11 @@ else:
     torch.cuda.synchronize()
     for stage, num_steps in enumerate([10, 20]): # burnin, then benchmark
         t0 = time.time()
-        X = torch.randint(50304, (batch_size, 8), device=device, dtype=torch.float16)
+        X = torch.randint(50304, (batch_size, 8), device=device, dtype=torch.float32)
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
-            print(f"logits {logits.size()}")
+            print(f"logits {logits}")
             break
             # loss = loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), X.view(-1), ignore_index=-1)
             # optimizer.zero_grad(set_to_none=True)
