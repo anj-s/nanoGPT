@@ -41,9 +41,9 @@ class MLP(nn.Module):
     def forward(self, x):
         print(f"x.size() {x.size()}")
         x, _ = self.c_fc(x)
-        print(f"post c_fc x.size() {x.size()} self.c_fc.weight {self.c_fc.weight.size()}")
+        print(f"post c_fc x.size() {x.size()} self.c_fc.weight {self.c_fc.weight}")
         x = self.gelu(x)
-        print(f"post gelu x.size() {x.size()} self.c_proj.weight.size() {self.c_proj.weight.size()}")
+        print(f"post gelu x.size() {x.size()} self.c_proj.weight.size() {self.c_proj.weight}")
         x, _ = self.c_proj(x)
         x = self.dropout(x)
         return x
@@ -202,8 +202,7 @@ else:
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
-            print(f"logits {logits}")
-            break
+            print(f"logits.size() {logits.size()}")
             # loss = loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), X.view(-1), ignore_index=-1)
             # optimizer.zero_grad(set_to_none=True)
             # loss.backward()
