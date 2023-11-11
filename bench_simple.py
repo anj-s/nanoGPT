@@ -39,15 +39,13 @@ class MLP(nn.Module):
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
-        print(f"x.size() {x.size()}")
+        print(f"x.size() {x}")
         x, _ = self.c_fc(x)
-        print(f"post c_fc x.size() {x.size()} self.c_fc.weight {self.c_fc.weight}")
+        print(f"post c_fc x.size() {x} self.c_fc.weight {self.c_fc.weight.size()}")
         x = self.gelu(x)
-        print(f"post gelu x.size() {x.size()} self.c_proj.weight.size() {self.c_proj.weight}")
+        print(f"post gelu x.size() {x} self.c_proj.weight.size() {self.c_proj.weight.size()}")
         x, _ = self.c_proj(x)
-        print(f"final output before dropout {x}")
         x = self.dropout(x)
-        print(f"final output after dropout {x}")
         return x
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
