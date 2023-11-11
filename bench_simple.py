@@ -21,6 +21,11 @@ from dist_initialize import distributed_init, global_barrier
 from fairscale.nn.megatron.tensor_parallel.layers import RowParallelLinear, ColumnParallelLinear
 from fairscale.nn.megatron.tensor_parallel.model_parallel_config import ModelParallelConfig
 
+def print0(msg):
+    if torch.distributed.get_rank() == 0:
+        print(msg)
+
+
 # -----------------------------------------------------------------------------
 # Model definition to get started, taking a simple MLP module from the larger GPT one.
 data_parallel_size = 1
@@ -39,11 +44,11 @@ class MLP(nn.Module):
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
-        print(f"x.size() {x}")
+        print0(f"x.size() {x.size()}")
         x, _ = self.c_fc(x)
-        print(f"post c_fc x.size() {x} self.c_fc.weight {self.c_fc.weight.size()}")
+        print0(f"post c_fc x.size() {x.size()} self.c_fc.weight {self.c_fc.weight.size()}")
         x = self.gelu(x)
-        print(f"post gelu x.size() {x} self.c_proj.weight.size() {self.c_proj.weight.size()}")
+        print0(f"post gelu x.size() {x.size()} self.c_proj.weight.size() {self.c_proj.weight.size()}")
         x, _ = self.c_proj(x)
         x = self.dropout(x)
         return x
@@ -63,14 +68,14 @@ class MLP(nn.Module):
         ]
         num_decay_params = sum(p.numel() for p in decay_params)
         num_nodecay_params = sum(p.numel() for p in nodecay_params)
-        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
-        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
+        print0(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
+        print0(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
         # Create AdamW optimizer and use the fused version if it is available
         fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
         use_fused = fused_available and device_type == 'cuda'
         extra_args = dict(fused=True) if use_fused else dict()
         optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
-        print(f"using fused AdamW: {use_fused}")
+        print0(f"using fused AdamW: {use_fused}")
 
         return optimizer
 
@@ -178,8 +183,7 @@ if profile:
         with_flops=True,
         with_modules=False, # only for torchscript models atm
     ) as prof:
-    
-        X, Y = get_batch('train')
+
         for k in range(num_steps):
             with ctx:
                 logits, loss = model(X, Y)
@@ -188,7 +192,7 @@ if profile:
             loss.backward()
             optimizer.step()
             lossf = loss.item()
-            print(f"{k}/{num_steps} loss: {lossf:.4f}")
+            print0(f"{k}/{num_steps} loss: {lossf:.4f}")
 
             prof.step() # notify the profiler at end of each step
 
@@ -202,16 +206,16 @@ else:
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
-            print(f"logits.size() {logits.size()}")
-            # loss = loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), X.view(-1), ignore_index=-1)
-            # optimizer.zero_grad(set_to_none=True)
-            # loss.backward()
-            # optimizer.step()
-            # lossf = loss.item()
-            # print(f"{k}/{num_steps} loss: {lossf:.4f}")
+            print0(f"logits.size() {logits.size()}")
+            loss = loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), X.view(-1), ignore_index=-1)
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            optimizer.step()
+            lossf = loss.item()
+            print0(f"{k}/{num_steps} loss: {lossf:.4f}")
         # torch.cuda.synchronize()
         # t1 = time.time()
         # dt = t1-t0
         # mfu = model.estimate_mfu(batch_size * 1 * num_steps, dt)
         # if stage == 1:
-        #     print(f"time per iteration: {dt/num_steps*1000:.4f}ms, MFU: {mfu*100:.2f}%")
+        #     print0(f"time per iteration: {dt/num_steps*1000:.4f}ms, MFU: {mfu*100:.2f}%")
