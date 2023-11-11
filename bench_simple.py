@@ -207,7 +207,7 @@ else:
             with ctx:
                 logits = model(X)
             print0(f"logits.size() {logits.size()}")
-            loss = loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), X.view(-1), ignore_index=-1)
+            loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
