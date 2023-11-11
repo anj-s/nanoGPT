@@ -39,9 +39,12 @@ class MLP(nn.Module):
         # self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
-        x = self.c_fc(x)
+        print(f"x.size() {x.size()}")
+        x, _ = self.c_fc(x)
+        print(f"post c_fc x.size() {x.size()} self.c_fc.weight {self.c_fc.weight.size()}")
         x = self.gelu(x)
-        x = self.c_proj(x)
+        print(f"post gelu x.size() {x.size()} self.c_proj.weight.size() {self.c_proj.weight.size()}")
+        x, _ = self.c_proj(x)
         x = self.dropout(x)
         return x
 
@@ -144,13 +147,6 @@ else:
     world_size = 1
 
 # ----------------------------------------------------------------------------------------
-
-# data loading init
-
-# alternatively, if fixed data is desired to not care about data loading
-x = torch.randint(50304, (batch_size, block_size), device=device)
-y = torch.randint(50304, (batch_size, block_size), device=device)
-get_batch = lambda split: (x, y)
 
 # model init
 model = MLP(8)
