@@ -45,7 +45,9 @@ class MLP(nn.Module):
         x = self.gelu(x)
         print(f"post gelu x.size() {x.size()} self.c_proj.weight.size() {self.c_proj.weight}")
         x, _ = self.c_proj(x)
+        print(f"final output before dropout {x}")
         x = self.dropout(x)
+        print(f"final output after dropout {x}")
         return x
 
     def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
