@@ -35,7 +35,7 @@ class MLP(nn.Module):
         self.c_fc    = ColumnParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False)
         self.gelu    = nn.GELU()
         # self.c_proj  = nn.Linear(4 * d_model, d_model, bias=False)
-        self.c_proj  = RowParallelLinear(4 * d_model, d_model, config=mpc, init_method=init_fn, bias=False)
+        self.c_proj  = RowParallelLinear(4 * d_model, d_model, config=mpc, init_method=init_fn, bias=False, input_is_parallel=True)
         # self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
