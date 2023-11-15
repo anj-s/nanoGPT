@@ -183,11 +183,11 @@ if profile:
         with_flops=True,
         with_modules=False, # only for torchscript models atm
     ) as prof:
-
+        X = torch.randn((batch_size, 8), device=device, dtype=torch.float16)
         for k in range(num_steps):
             with ctx:
-                logits, loss = model(X, Y)
-            X, Y = get_batch('train')
+                logits = model(X)
+            loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
