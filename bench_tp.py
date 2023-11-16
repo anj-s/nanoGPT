@@ -32,23 +32,19 @@ data_parallel_size = 1
 tensor_parallel_size = 2
 mpc = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel_size)
 init_fn = torch.nn.init.uniform_
+
 class MLP(nn.Module):
 
     def __init__(self, d_model):
         super().__init__()
-        # self.c_fc    = nn.Linear(d_model, 4 * d_model, bias=False)
         self.c_fc    = ColumnParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False)
         self.gelu    = nn.GELU()
-        # self.c_proj  = nn.Linear(4 * d_model, d_model, bias=False)
         self.c_proj  = RowParallelLinear(4 * d_model, d_model, config=mpc, init_method=init_fn, bias=False, input_is_parallel=True)
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
-        print0(f"x.size() {x.size()}")
         x, _ = self.c_fc(x)
-        print0(f"post c_fc x.size() {x.size()} self.c_fc.weight {self.c_fc.weight.size()}")
         x = self.gelu(x)
-        print0(f"post gelu x.size() {x.size()} self.c_proj.weight.size() {self.c_proj.weight.size()}")
         x, _ = self.c_proj(x)
         x = self.dropout(x)
         return x
@@ -96,16 +92,42 @@ class MLP(nn.Module):
         return mfu
 
 
+class RowParallelMLP(MLP):
 
+    def __init__(self, d_model):
+        super().__init__()
+        self.c_fc    = RowParallelLinear(d_model, d_model, bias=False, config=mpc, init_method=init_fn, input_is_parallel=False)
+        self.gelu    = nn.GELU()
+
+    def forward(self, x):
+        x, _ = self.c_fc(x)
+        x = self.gelu(x)
+        return x
+
+class ColumnParallelMLP(MLP):
+
+    def __init__(self, d_model):
+        super().__init__()
+        self.c_fc    = ColumnParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False, gather_output=True)
+        self.gelu    = nn.GELU()
+    
+    def forward(self, x):
+        x, _ = self.c_fc(x)
+        x = self.gelu(x)
+        return x
+        
 # -----------------------------------------------------------------------------
 batch_size = 12
 bias = False
 seed = 1337
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
-profile = False # use pytorch profiler, or just simple benchmarking?
+profile = True # use pytorch profiler, or just simple benchmarking?
 ddp = False
 ddp_tp = True
+col_parallel = True
+row_parallel = False
+col_row_parallel = False
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -154,7 +176,12 @@ else:
 # ----------------------------------------------------------------------------------------
 
 # model init
-model = MLP(8)
+if col_parallel:
+    model = ColumnParallelMLP(8)
+elif row_parallel:
+    model = RowParallelMLP(8)
+else:
+    model = MLP(8)
 optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
 
