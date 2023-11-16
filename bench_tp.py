@@ -214,9 +214,10 @@ if profile:
         with_modules=False, # only for torchscript models atm
     ) as prof:
         X = torch.randn((batch_size, 8), device=device, dtype=torch.float16)
+        make_dot(model(X), params=dict(model.named_parameters()))
         for k in range(num_steps):
             with ctx:
-                logits = make_dot(model(X), params=dict(model.named_parameters()))
+                logits = model(X)
             # print0(f"logits.size() {logits.size()} X {X.size()}")
             loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
