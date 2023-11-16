@@ -18,29 +18,22 @@ from model import GPTConfig, GPT
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from dist_initialize import distributed_init, global_barrier
-from fairscale.nn.megatron.tensor_parallel.layers import RowParallelLinear, ColumnParallelLinear
-from fairscale.nn.megatron.tensor_parallel.model_parallel_config import ModelParallelConfig
 
+from fairscale.nn.activation_checkpoint.checkpoint_activations import checkpoint_wrapper
+from fairscale.tools.layerwise_memory_tracker import LayerwiseMemoryTracker
 
 def print0(msg):
     if torch.distributed.get_rank() == 0:
         print(msg)
 
 
-# -----------------------------------------------------------------------------
-# Model definition to get started, taking a simple MLP module from the larger GPT one.
-data_parallel_size = 1
-tensor_parallel_size = 2
-mpc = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel_size)
-init_fn = torch.nn.init.uniform_
-
 class MLP(nn.Module):
 
     def __init__(self, d_model):
         super().__init__()
-        self.c_fc    = ColumnParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False)
+        self.c_fc    = nn.Linear(d_model, 4 * d_model, bias=False)
         self.gelu    = nn.GELU()
-        self.c_proj  = RowParallelLinear(4 * d_model, d_model, config=mpc, init_method=init_fn, bias=False, input_is_parallel=True)
+        self.c_proj  = nn.Linear(4 * d_model, d_model, bias=False)
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
@@ -93,32 +86,6 @@ class MLP(nn.Module):
         return mfu
 
 
-class RowParallelMLP(MLP):
-    # FW: Scatter -> all_reduce(SUM)
-    # BW: all_gather -> Identity op
-    def __init__(self, d_model):
-        super().__init__(d_model)
-        self.c_fc    = RowParallelLinear(d_model, d_model, bias=False, config=mpc, init_method=init_fn, input_is_parallel=False)
-        self.gelu    = nn.GELU()
-
-    def forward(self, x):
-        x, _ = self.c_fc(x)
-        x = self.gelu(x)
-        return x
-
-class ColumnParallelMLP(MLP):
-    # FW: Identity op -> all_gather(last dim)
-    # BW: Split op(last dim) -> all_reduce(SUM)
-    def __init__(self, d_model):
-        super().__init__(d_model)
-        self.c_fc    = ColumnParallelLinear(d_model, d_model, config=mpc, init_method=init_fn, bias=False, gather_output=True)
-        self.gelu    = nn.GELU()
-    
-    def forward(self, x):
-        x, _ = self.c_fc(x)
-        x = self.gelu(x)
-        return x
-        
 # -----------------------------------------------------------------------------
 batch_size = 12
 bias = False
@@ -179,23 +146,22 @@ else:
 # ----------------------------------------------------------------------------------------
 
 # model init
-if col_parallel:
-    model = ColumnParallelMLP(8)
-elif row_parallel:
-    model = RowParallelMLP(8)
-else:
-    model = MLP(8)
+model = checkpoint_wrapper(MLP(8))
+
+# monitor AC for the given model
+tracker = LayerwiseMemoryTracker()
+tracker.monitor(model)
+
 optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
 model.to(device)
+
 
 global_barrier()
 
 # wrap model into DDP container
 if ddp:
     model = DDP(model, device_ids=[local_rank])
-elif ddp_tp:
-    # for now let us do vanilla TP for dp=1
-    pass
+
 
 if profile:
     # useful docs on pytorch profiler:
@@ -217,15 +183,15 @@ if profile:
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
-            # print0(f"logits.size() {logits.size()} X {X.size()}")
             loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
             lossf = loss.item()
             print0(f"{k}/{num_steps} loss: {lossf:.4f}")
-
             prof.step() # notify the profiler at end of each step
+            if torch.distributed.get_rank() == 0:
+                tracker.show_plots(capture=True)
 
 else:
 
@@ -237,7 +203,6 @@ else:
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
-            print0(f"logits.size() {logits.size()} X {X.size()}")
             loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
