@@ -95,7 +95,7 @@ class MLP(nn.Module):
 class RowParallelMLP(MLP):
 
     def __init__(self, d_model):
-        super().__init__()
+        super().__init__(d_model)
         self.c_fc    = RowParallelLinear(d_model, d_model, bias=False, config=mpc, init_method=init_fn, input_is_parallel=False)
         self.gelu    = nn.GELU()
 
@@ -107,7 +107,7 @@ class RowParallelMLP(MLP):
 class ColumnParallelMLP(MLP):
 
     def __init__(self, d_model):
-        super().__init__()
+        super().__init__(d_model)
         self.c_fc    = ColumnParallelLinear(d_model, 4 * d_model, config=mpc, init_method=init_fn, bias=False, gather_output=True)
         self.gelu    = nn.GELU()
     
