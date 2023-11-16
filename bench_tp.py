@@ -214,6 +214,7 @@ if profile:
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
+            print0(f"logits.size() {logits.size()} X {X.size()}")
             loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -233,7 +234,7 @@ else:
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
-            print0(f"logits.size() {logits.size()}")
+            print0(f"logits.size() {logits.size()} X {X.size()}")
             loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
