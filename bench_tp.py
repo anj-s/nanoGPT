@@ -21,6 +21,9 @@ from dist_initialize import distributed_init, global_barrier
 from fairscale.nn.megatron.tensor_parallel.layers import RowParallelLinear, ColumnParallelLinear
 from fairscale.nn.megatron.tensor_parallel.model_parallel_config import ModelParallelConfig
 
+from torchviz import make_dot, make_dot_from_trace
+
+
 def print0(msg):
     if torch.distributed.get_rank() == 0:
         print(msg)
@@ -213,8 +216,8 @@ if profile:
         X = torch.randn((batch_size, 8), device=device, dtype=torch.float16)
         for k in range(num_steps):
             with ctx:
-                logits = model(X)
-            print0(f"logits.size() {logits.size()} X {X.size()}")
+                logits = make_dot(model(X), params=dict(model.named_parameters()))
+            # print0(f"logits.size() {logits.size()} X {X.size()}")
             loss = torch.nn.functional.cross_entropy(logits, X)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
