@@ -182,10 +182,11 @@ if profile:
             lossf = loss.item()
             print0(f"{k}/{num_steps} loss: {lossf:.4f}")
             prof.step() # notify the profiler at end of each step
-            ac_img = tracker.show_plots(capture=True)
-            if torch.distributed.get_rank() == 0:
-                fname="ac_tracker/" + str(uuid.uuid4())
-                ac_img.save(fname)
+        
+    ac_img = tracker.show_plots(capture=True)
+    if torch.distributed.get_rank() == 0:
+        fname="ac_tracker/" + str(uuid.uuid4()) + ".jpg"
+        ac_img.save(fname)
 
 else:
 
