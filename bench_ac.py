@@ -20,7 +20,7 @@ from torch.distributed import init_process_group, destroy_process_group
 from dist_initialize import distributed_init, global_barrier
 
 from fairscale.nn.activation_checkpoint.checkpoint_activations import checkpoint_wrapper
-from fairscale.tools.layerwise_memory_tracker import LayerwiseMemoryTracker
+from fairscale.perf_tools.layerwise_memory_tracker import LayerwiseMemoryTracker
 
 def print0(msg):
     if torch.distributed.get_rank() == 0:
