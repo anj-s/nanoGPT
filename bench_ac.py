@@ -94,10 +94,6 @@ device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
 profile = True # use pytorch profiler, or just simple benchmarking?
 ddp = False
-ddp_tp = True
-col_parallel = True
-row_parallel = False
-col_row_parallel = False
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -129,14 +125,6 @@ if ddp:
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
     seed_offset = ddp_rank # each process gets a different seed
-elif ddp_tp:
-    world_size = int(os.environ['WORLD_SIZE'])
-    local_rank = int(os.environ['LOCAL_RANK'])
-    device = f'cuda:{local_rank}'
-    torch.cuda.set_device(device)
-    distributed_init(world_size, data_parallel_size, tensor_parallel_size)
-    master_process = torch.distributed.get_rank() == 0 # this process will do logging, checkpointing etc.
-    seed_offset = local_rank # each process gets a different seed
 else:
     # if not ddp, we are running on a single gpu, and one process
     master_process = True
