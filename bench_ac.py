@@ -24,6 +24,8 @@ from dist_initialize import distributed_init, global_barrier
 from fairscale.nn.activation_checkpoint.checkpoint_activations import checkpoint_wrapper
 from fairscale.perf_tools.layer_memory_tracker import LayerwiseMemoryTracker
 
+from PIL import Image
+
 def print0(msg):
     if torch.distributed.get_rank() == 0:
         print(msg)
@@ -180,9 +182,10 @@ if profile:
             lossf = loss.item()
             print0(f"{k}/{num_steps} loss: {lossf:.4f}")
             prof.step() # notify the profiler at end of each step
+            ac_img = tracker.show_plots(capture=True)
             if torch.distributed.get_rank() == 0:
-                with os.open("./ac_tracker/" + str(uuid.uuid4()), mode="wb") as f:
-                    f.save(tracker.show_plots(capture=True))
+                fname="ac_tracker/" + str(uuid.uuid4())
+                ac_img.save(fname)
 
 else:
 
