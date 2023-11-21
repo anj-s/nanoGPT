@@ -167,7 +167,7 @@ if profile:
         with_flops=True,
         with_modules=False, # only for torchscript models atm
     ) as prof:
-        X = torch.randn((batch_size, 8), device=device, dtype=torch.float16)
+        X = torch.randn((batch_size, 8), device=device, dtype=torch.float16, requires_grad=True)
         for k in range(num_steps):
             with ctx:
                 logits = model(X)
