@@ -12,6 +12,8 @@ import inspect
 from contextlib import nullcontext
 import numpy as np
 import time
+import uuid
+
 import torch
 from torch import nn
 from model import GPTConfig, GPT
@@ -179,7 +181,8 @@ if profile:
             print0(f"{k}/{num_steps} loss: {lossf:.4f}")
             prof.step() # notify the profiler at end of each step
             if torch.distributed.get_rank() == 0:
-                tracker.show_plots(capture=True)
+                with os.open("./ac_tracker/" + str(uuid.uuid4()), mode="wb") as f:
+                    f.save(tracker.show_plots(capture=True))
 
 else:
 
