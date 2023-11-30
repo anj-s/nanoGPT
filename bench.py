@@ -146,7 +146,7 @@ if fsdp:
         model = GPT(gptconf)
         model = FSDP(model, **fsdp_config)
     
-    optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
+    optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type, module=model)
     model.to(device)
 
 if compile:
@@ -177,7 +177,8 @@ if profile:
             X, Y = get_batch('train')
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
-            optimizer.step()
+            with torch.profiler.record_function("optimizer.step"):
+                optimizer.step()
             lossf = loss.item()
             print(f"{k}/{num_steps} loss: {lossf:.4f}")
 
