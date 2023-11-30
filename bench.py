@@ -32,7 +32,7 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 profile = False # use pytorch profiler, or just simple benchmarking?
 ddp = False
 fsdp = False
-activation_checkpoint = False
+activation_checkpointing = False
 fsdp_wrap = False
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
@@ -127,7 +127,7 @@ gptconf = GPTConfig(
     n_layer = 12, n_head = 12, n_embd = 768, # size of the model
     dropout = 0, # for determinism
     bias = bias,
-    activation_checkpointing = activation_checkpoint
+    activation_checkpointing = activation_checkpointing
 )
 
 if not fsdp:
