@@ -100,7 +100,7 @@ class Block(nn.Module):
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
         self.attn = CausalSelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
-        if config.activation_checkpoint:
+        if config.activation_checkpointing:
             self.mlp = checkpoint_wrapper(MLP(config))
         else:
             self.mlp = MLP(config)
