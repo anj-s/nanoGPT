@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from fairscale.tools.auto_wrap import enable_wrap
+from fairscale.tools.auto_wrap import wrap
 from fairscale.nn.activation_checkpoint.checkpoint_activations import checkpoint_wrapper
 
 class LayerNorm(nn.Module):

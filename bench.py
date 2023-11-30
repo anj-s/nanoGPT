@@ -98,8 +98,9 @@ if fsdp:
 # ----------------------------------------------------------------------------------------
 # Memory tracking using snapshots
 torch.cuda.memory._record_memory_history(
+        enabled=True,
         # keep a maximum 100,000 alloc/free events from before the snapshot
-        max_entries=100000)
+        trace_alloc_max_entries=100000)
 
 # -------------------------------Start initialization and training---------------------------------------------------
 # data loading init
