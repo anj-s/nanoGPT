@@ -13,6 +13,8 @@ import numpy as np
 import time
 import torch
 from model import GPTConfig, GPT
+from pickle import dump
+from torch.cuda._memory_viz import profile_plot    
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from fairscale.nn.data_parallel.fsdp import FullyShardedDataParallel as FSDP
@@ -30,6 +32,8 @@ compile = True # use PyTorch 2.0 to compile the model to be faster
 profile = False # use pytorch profiler, or just simple benchmarking?
 ddp = False
 fsdp = False
+activation_checkpoint = False
+fsdp_wrap = False
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -91,7 +95,13 @@ if fsdp:
     tokens_per_iter = fsdp_world_size * batch_size * block_size
     print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
+# ----------------------------------------------------------------------------------------
+# Memory tracking using snapshots
+torch.cuda.memory._record_memory_history(
+        # keep a maximum 100,000 alloc/free events from before the snapshot
+        max_entries=100000)
 
+# -------------------------------Start initialization and training---------------------------------------------------
 # data loading init
 if real_data:
     dataset = 'openwebtext'
@@ -116,6 +126,7 @@ gptconf = GPTConfig(
     n_layer = 12, n_head = 12, n_embd = 768, # size of the model
     dropout = 0, # for determinism
     bias = bias,
+    activation_checkpointing = activation_checkpoint
 )
 
 if not fsdp:
@@ -129,7 +140,8 @@ if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 
 if fsdp:
-    with enable_wrap(wrapper_cls=FSDP, **fsdp_config):
+    fsdp_wrap_ctx = nullcontext() if not fsdp_wrap else enable_wrap(wrapper_cls=FSDP, **fsdp_config)
+    with fsdp_wrap_ctx:
         model = GPT(gptconf)
         model = FSDP(model, **fsdp_config)
     
@@ -150,9 +162,9 @@ if profile:
         activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
         schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./bench_log'),
-        record_shapes=False,
-        profile_memory=False,
-        with_stack=False, # incurs an additional overhead, disable if not needed
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True, # incurs an additional overhead, disable if not needed
         with_flops=True,
         with_modules=False, # only for torchscript models atm
     ) as prof:
@@ -169,6 +181,14 @@ if profile:
             print(f"{k}/{num_steps} loss: {lossf:.4f}")
 
             prof.step() # notify the profiler at end of each step
+
+            snapshot = torch.cuda.memory._snapshot()
+    
+    with open('./bench_log/fsdp_snapshot.pickle', 'wb') as f:
+        dump(snapshot, f)
+    
+    with open('./bench_log/fsdp_output.html', 'w') as f:
+        f.write(profile_plot(prof))
 
 else:
 

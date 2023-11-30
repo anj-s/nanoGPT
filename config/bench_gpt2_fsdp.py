@@ -9,3 +9,5 @@ compile = False # use PyTorch 2.0 to compile the model to be faster
 profile = True # use pytorch profiler, or just simple benchmarking?
 ddp = False # Use DDP for benchmarking
 fsdp = True
+activation_checkpoint= False # Use activation checkpointing to save on memory.
+fsdp_wrap = False # Wrap just the outermost module with FSDP

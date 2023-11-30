@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from fairscale.nn.data_parallel.fsdp.auto_wrap import wrap
+from fairscale.nn.activation_checkpoint.checkpoint_activations import checkpoint_wrapper
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -99,7 +100,10 @@ class Block(nn.Module):
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
         self.attn = CausalSelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
-        self.mlp = MLP(config)
+        if config.activation_checkpoint:
+            self.mlp = checkpoint_wrapper(MLP(config))
+        else:
+            self.mlp = MLP(config)
 
     def forward(self, x):
         x = x + self.attn(self.ln_1(x))
@@ -115,6 +119,9 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+
+    # Runtime related configs
+    activation_checkpointing: bool = False
 
 class GPT(nn.Module):
 
