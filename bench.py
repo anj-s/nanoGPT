@@ -15,7 +15,8 @@ import torch
 from model import GPTConfig, GPT
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
-from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
+from fairscale.nn.data_parallel.fsdp import FullyShardedDataParallel as FSDP
+from fairscale.nn.data_parallel.fsdp.auto_wrap import enable_wrap
 
 # -----------------------------------------------------------------------------
 batch_size = 12
@@ -61,14 +62,17 @@ if ddp:
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
     seed_offset = ddp_rank # each process gets a different seed
+    tokens_per_iter = ddp_world_size * batch_size * block_size
+    print(f"tokens per iteration will be: {tokens_per_iter:,}")
+
 else:
     # if not ddp, we are running on a single gpu, and one process
     master_process = True
     seed_offset = 0
     ddp_world_size = 1
+    tokens_per_iter = ddp_world_size * batch_size * block_size
+    print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
-tokens_per_iter = ddp_world_size * batch_size * block_size
-print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 # ----------------------------------------------------------------------------------------
 # FSDP configs
@@ -84,6 +88,8 @@ if fsdp:
     # Compute the FSDP config.
     fsdp_config = {}
     fsdp_config["mixed_precision"] = True
+    tokens_per_iter = fsdp_world_size * batch_size * block_size
+    print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 
 # data loading init
@@ -111,9 +117,11 @@ gptconf = GPTConfig(
     dropout = 0, # for determinism
     bias = bias,
 )
-model = GPT(gptconf)
-optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
-model.to(device)
+
+if not fsdp:
+    model = GPT(gptconf)
+    optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
+    model.to(device)
 
 
 # wrap model into DDP container
@@ -121,8 +129,12 @@ if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 
 if fsdp:
-    model = FSDP(model, **fsdp_config)
-
+    with enable_wrap(wrapper_cls=FSDP, **fsdp_config):
+        model = GPT(gptconf)
+        model = FSDP(model, **fsdp_config)
+    
+    optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
+    model.to(device)
 
 if compile:
     print("Compiling model...")
