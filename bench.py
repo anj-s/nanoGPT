@@ -18,7 +18,7 @@ from torch.cuda._memory_viz import profile_plot
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from fairscale.nn.data_parallel.fsdp import FullyShardedDataParallel as FSDP
-from fairscale.nn.data_parallel.fsdp.auto_wrap import enable_wrap
+from fairscale.tools.auto_wrap import enable_wrap
 
 # -----------------------------------------------------------------------------
 batch_size = 12
