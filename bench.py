@@ -96,11 +96,11 @@ if fsdp:
     print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 # ----------------------------------------------------------------------------------------
-# Memory tracking using snapshots
-torch.cuda.memory._record_memory_history(
-        enabled=True,
-        # keep a maximum 100,000 alloc/free events from before the snapshot
-        trace_alloc_max_entries=100000)
+# # Memory tracking using snapshots
+# torch.cuda.memory._record_memory_history(
+#         enabled=True,
+#         # keep a maximum 100,000 alloc/free events from before the snapshot
+#         trace_alloc_max_entries=100000)
 
 # -------------------------------Start initialization and training---------------------------------------------------
 # data loading init
@@ -145,9 +145,8 @@ if fsdp:
     with fsdp_wrap_ctx:
         model = GPT(gptconf)
         model = FSDP(model, **fsdp_config)
-    
+    model = model.to(device)
     optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type, module=model)
-    model.to(device)
 
 if compile:
     print("Compiling model...")
@@ -169,7 +168,12 @@ if profile:
         with_flops=True,
         with_modules=False, # only for torchscript models atm
     ) as prof:
-    
+        # Memory tracking using snapshots
+        torch.cuda.memory._record_memory_history(
+            enabled=True,
+            # keep a maximum 100,000 alloc/free events from before the snapshot
+            trace_alloc_max_entries=100000)
+
         X, Y = get_batch('train')
         for k in range(num_steps):
             with ctx:
