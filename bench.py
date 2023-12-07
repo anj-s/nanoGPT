@@ -69,7 +69,7 @@ if ddp:
     tokens_per_iter = ddp_world_size * batch_size * block_size
     print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
-else:
+if not ddp and not fsdp:
     # if not ddp, we are running on a single gpu, and one process
     master_process = True
     seed_offset = 0
@@ -130,6 +130,7 @@ gptconf = GPTConfig(
     activation_checkpointing = activation_checkpointing
 )
 
+torch.cuda.memory._record_memory_history()
 if not fsdp:
     model = GPT(gptconf)
     optimizer = model.configure_optimizers(weight_decay=1e-2, learning_rate=1e-4, betas=(0.9, 0.95), device_type=device_type)
@@ -168,11 +169,6 @@ if profile:
         with_flops=True,
         with_modules=False, # only for torchscript models atm
     ) as prof:
-        # Memory tracking using snapshots
-        torch.cuda.memory._record_memory_history(
-            enabled=True,
-            # keep a maximum 100,000 alloc/free events from before the snapshot
-            trace_alloc_max_entries=100000)
 
         X, Y = get_batch('train')
         for k in range(num_steps):
@@ -188,7 +184,7 @@ if profile:
 
             prof.step() # notify the profiler at end of each step
 
-            snapshot = torch.cuda.memory._snapshot()
+    snapshot = torch.cuda.memory._snapshot()
     
     with open('./bench_log/fsdp_snapshot.pickle', 'wb') as f:
         dump(snapshot, f)
