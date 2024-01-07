@@ -11,3 +11,4 @@ ddp = False # Use DDP for benchmarking
 fsdp = True
 activation_checkpoint= False # Use activation checkpointing to save on memory.
 fsdp_wrap = False # Wrap just the outermost module with FSDP
+fsdp_ssd_offload = True

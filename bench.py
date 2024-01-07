@@ -34,6 +34,7 @@ ddp = False
 fsdp = False
 activation_checkpointing = False
 fsdp_wrap = False
+fsdp_ssd_offload = False
 exec(open('configurator.py').read()) # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -94,6 +95,9 @@ if fsdp:
     fsdp_config["mixed_precision"] = True
     tokens_per_iter = fsdp_world_size * batch_size * block_size
     print(f"tokens per iteration will be: {tokens_per_iter:,}")
+
+if fsdp and fsdp_ssd_offload:
+    fsdp_config["ssd_offload"] = True
 
 # ----------------------------------------------------------------------------------------
 # # Memory tracking using snapshots
