@@ -217,4 +217,4 @@ else:
         dt = t1-t0
         mfu = model.estimate_mfu(batch_size * 1 * num_steps, dt)
         if stage == 1:
-            print(f"time per iteration: {dt/num_steps*1000:.4f}ms, MFU: {mfu*100:.2f}%")
+            print(f"time per iteration: {dt/num_steps*1000:.4f}ms, MFU: {mfu*100:.6f}%")

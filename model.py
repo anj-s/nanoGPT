@@ -152,17 +152,21 @@ class GPT(nn.Module):
             if pn.endswith('c_proj.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 
+        self._num_params = self.get_num_params()/1e6
         # report number of parameters
         print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))
 
-    def get_num_params(self, non_embedding=True):
+    def get_num_params(self, non_embedding=True, n_params=None):
         """
         Return the number of parameters in the model.
         For non-embedding count (default), the position embeddings get subtracted.
         The token embeddings would too, except due to the parameter sharing these
         params are actually used as weights in the final layer, so we include them.
         """
-        n_params = sum(p.numel() for p in self.parameters())
+        if not n_params:
+            n_params = sum(p.numel() for p in self.parameters())
+        else:
+            n_params = self._num_params
         if non_embedding:
             n_params -= self.transformer.wpe.weight.numel()
         return n_params
