@@ -310,8 +310,12 @@ class GPT(nn.Module):
         flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter
         # express our flops throughput as ratio of A100 bfloat16 peak flops
         flops_achieved = flops_per_iter * (1.0/dt) # per second
-        flops_promised = 312e12 # A100 GPU bfloat16 peak flops is 312 TFLOPS
+        #flops_promised = 312e12 # A100 GPU bfloat16 peak flops is 312 TFLOPS
+        # TODO(anj): Make this configurable
+        # Set this to P4000 since that is what I am using for now
+        flops_promised = 83e12 # P4000 GPU fp16 peak flops is 83 TFLOPS
         mfu = flops_achieved / flops_promised
+        print(f"mfu {mfu} flops_achieved {flops_achieved}")
         return mfu
 
     @torch.no_grad()
