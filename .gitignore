@@ -8,4 +8,5 @@ __pycache__/
 *.pt
 *.pyc
 input.txt
-nanogpt.code-workspace
+env/
+venv/
